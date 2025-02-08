@@ -44,3 +44,15 @@ This repository contains scripts and data for analyzing microbiome data related 
 1. Activate the QIIME2 environment:
    ```bash
    conda activate qiime2-amplicon-2024.5
+2. Run the commands in comandos.txt to process the data. For example:
+   qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-path Manifest/manifest.txt --output-path Imported_data/cruda.qza --input-format PairedEndFastqManifestPhred33V2
+3. Execute the R scripts in the Scripts/ folder for statistical analysis and visualization.
+
+## Dependencies
+- QIIME2: For microbiome data processing.
+
+- R: For statistical analysis and visualization.
+Required R packages: dplyr, tidyr, ggplot2, pheatmap, FactoMineR, ggpubr.
+
+## Contributing
+Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
