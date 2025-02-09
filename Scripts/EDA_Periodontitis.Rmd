@@ -1,0 +1,451 @@
+---
+title: "Exploratory Data Analysis of Periodontitis data"
+author: "Martin Ruhle & Emiliano Jiménez"
+date: "2024-08-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introducción
+
+Vamos a buscar comprender como está compuesta la cohorte, así como las relaciones entre las variables.
+
+
+```{r warning=FALSE, messAGE=FALSE}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(polycor)
+library(GGally)
+```
+
+### Data Loading and Cleaning
+
+We load the metadata file and perform basic cleaning step
+
+```{r eval=FALSE}
+# Read the data
+metadata <- read.csv("metadata.csv")
+```
+```{r echo=FALSE}
+metadata <- read.csv("C:/Users/User/Documents/Ecología_microbiana/Proyecto_final/GitHub_repository/Data/completo_full.csv")
+```
+```{r}
+# FIltering metdata variables
+metadata_fil <- metadata %>%
+    select(Run, AGE, BOP_total, CAL_total, Cigarrettes_day, health_condition, Months_smoking, geo_loc_name_country, health_condition, RUN_ID, sex, Smoking, teeth, Periodontitis_extent_calc, Periodontitis_extent, Periodontitis_severity, )
+
+# Basic Statistics and Structure
+str(metadata_fil)
+summary(metadata_fil)
+
+# Checking for missing values
+colSums(is.na(metadata_fil))
+```
+
+### Clean and Tidy the Metadata
+
+```{r}
+# Extract the mock samples
+mock <- metadata_fil %>%
+  filter(is.na(health_condition))
+
+metadata_fil <- metadata_fil %>%
+  filter(!is.na(health_condition))
+```
+
+
+```{r warning=FALSE}
+# Replace empty strings with "Healthy" in the Periodontitis_extent column
+metadata_fil$Periodontitis_extent[metadata_fil$Periodontitis_extent == ""] <- "Healthy"
+
+metadata_fil <- metadata_fil %>%
+  mutate(
+    cigarrettes_group = case_when(
+      Cigarrettes_day == 0 ~ "No smoker",
+      Cigarrettes_day > 0 & Cigarrettes_day <= 10 ~ "1-10",
+      Cigarrettes_day > 10 & Cigarrettes_day <= 20 ~ "11-20",
+      Cigarrettes_day > 20 ~ "20+",
+      TRUE ~ NA_character_
+    ),
+    Months_smoking_group = case_when(
+      Months_smoking == 0 ~ "No smoker",
+      Months_smoking > 0 & Months_smoking <= 120 ~ "1-120",
+      Months_smoking > 120 & Months_smoking <= 240 ~ "121-240",
+      Months_smoking > 240 & Months_smoking <= 360 ~ "241-360",
+      Months_smoking > 360 ~ "360+"
+      ),
+    teeth_group = case_when(
+      teeth < 20 ~ "10-19",
+      teeth >= 20 & teeth < 25 ~ "20-24",
+      teeth >= 25 & teeth < 30 ~ "25-29",
+      teeth >= 30 ~ "30+"
+      ),
+    BOP_group = case_when(
+      BOP_total <= 10 ~ "0-10",
+      BOP_total > 10 & BOP_total <= 30 ~ "11-30",
+      BOP_total > 30 & BOP_total <= 60 ~ "31-60",
+      BOP_total > 60 ~ "61+"
+    ),
+    CAL_group = case_when(
+      CAL_total <= 2.5 ~ "1.3-2.5",
+      CAL_total > 2.5 & CAL_total <= 4 ~ "2.51-4",
+      CAL_total > 4 & CAL_total <= 6 ~ "4.01-6",
+      CAL_total > 6 ~ "6.01+"
+    ))
+```
+
+
+### Data Analysis
+A generalized analysis is first preformed, visualizing and calculating correlations between the main variables.
+
+```{r}
+ggpairs(metadata_fil, columns = c(2:8, 10:13), ggplot2::aes(colour=factor(Periodontitis_extent, levels = c("Generalized", "Localized", "Healthy")), alpha = 0.75))
+```
+
+## Demographic Analysis
+## AGE Distribution
+We analyze the distribution of participants' AGEs and the relationship between AGE and other variables. 
+
+```{r warning=FALSE}
+# AGE Participant Distribution
+ggplot(metadata_fil, aes(x = AGE)) + 
+  geom_histogram(stat = "count", fill = "#5ea758", color = "grey") + 
+  xlab("AGE") + 
+  ylab("Count") + 
+  ggtitle("AGE Participant Distribution")
+
+# Define the AGE groups
+AGE_groups <- metadata_fil %>%
+  filter(!is.na(AGE)) %>%
+  mutate(AGE_group = case_when(
+    AGE < 20 ~ "<20",
+    AGE >= 20 & AGE < 30 ~ "20-29",
+    AGE >= 30 & AGE < 40 ~ "30-39",
+    AGE >= 40 ~ "40+"
+  ))
+
+# Calculate the percentAGE for each AGE group
+AGE_group_percentAGEs <- AGE_groups %>%
+  count(AGE_group) %>%
+  mutate(percentAGE = n / sum(n) * 100)
+
+# Display the results
+AGE_group_percentAGEs
+
+```
+
+### AGE and Preterm Correlation Analysis
+
+
+```{r warning=FALSE}
+# Convert logical columns to numeric
+metadata_fil$periodontitis <- as.numeric(metadata_fil$health_condition)
+
+# Calculate the correlations
+AGE_periodontitis_cor <- polyserial(metadata_fil$AGE, factor(metadata_fil$health_condition))
+
+# Calculate the p-values
+smocking_bop_test <- cor.test(metadata_fil$Months_smoking, metadata_fil$BOP_total, method = "pearson")
+
+smocking_bop_test_generalized <- cor.test(metadata_fil[metadata_fil$Periodontitis_extent == "Generalized",]$Months_smoking, metadata_fil[metadata_fil$Periodontitis_extent == "Generalized",]$BOP_total, method = "pearson")
+
+# Create a formatted matrix with correlations and significance levels
+pvalue_polyserial <- paste0(round(AGE_periodontitis_cor, 2), " (p=", format(AGE_periodontitis_test$p.value, digits = 2), ")")
+pvalue_person <-
+formatted_matrix[1, 2] <- paste0(round(AGE_periodontitis_cor, 2), " (p=", format(AGE_periodontitis_test$p.value, digits = 2), ")")
+
+ggplot(metadata_fil, aes(x=Months_smoking, y=BOP_total, color=Periodontitis_extent)) +
+  geom_point() +
+  geom_smooth(method = "lm", )
+
+ggplot(metadata_fil, aes(x=Months_smoking, y=CAL_total, color=Periodontitis_extent)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(metadata_fil, aes(x=Months_smoking, y=Periodontitis_extent_calc, color=Periodontitis_extent)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# Overlaid AGE Participant Distribution by was_term
+ggplot(metadata_fil[!is.na(metadata_fil$AGE),], aes(x = AGE_factor, fill = as.factor(was_term))) + 
+  geom_histogram(stat = "count", position = "identity", alpha = 0.5, color = "black") + 
+  xlab("AGE") + 
+  ylab("Count") + 
+  ggtitle("AGE Participant Distribution by Term Status") +
+  scale_fill_manual(name = "Term Status", values = c("TRUE" = "blue", "FALSE" = "red"), labels = c("TRUE" = "Term", "FALSE" = "Preterm")) + 
+  annotate("text", x = Inf, y = Inf, label = paste("point-biserial corr:", format(formatted_matrix[2,1], digits = 2)), hjust = 1.1, vjust = 2, size = 3)
+
+
+# Overlaid AGE Participant Distribution by was_term
+ggplot(metadata_fil[!is.na(metadata_fil$AGE),], aes(x = AGE_factor, fill = as.factor(was_early_preterm))) + 
+  geom_histogram(stat = "count", position = "identity", alpha = 0.5, color = "black") + 
+  xlab("AGE") + 
+  ylab("Count") + 
+  ggtitle("AGE Participant Distribution by Early Preterm Status") +
+  scale_fill_manual(name = "Early preterm Status", values = c("TRUE" = "red", "FALSE" = "blue"), labels = c("TRUE" = "Early preterm", "FALSE" = "Not early preterm")) + 
+  annotate("text", x = Inf, y = Inf, label = paste("point-biserial corr:", format(formatted_matrix[3,1], digits = 2)), hjust = 1.1, vjust = 2, size = 3)
+```
+
+Like seen in bibliography the maternal AGE is correlated with the preterm risk (Fuchs 2018).
+
+## Pregnancy and Delivery Details
+### Term Status
+
+We analyze the distribution of term, preterm, and early preterm statuses among participants.
+
+```{r}
+# Create the table
+term_status <- table(participant_data$was_preterm, participant_data$was_early_preterm)
+
+# Add descriptive names to the dimensions
+dimnames(term_status) <- list(
+  Preterm_Status = c("Full-Term", "Preterm"),
+  Early_Preterm_Status = c("Not Early Preterm", "Early Preterm")
+)
+
+# Display the table with descriptive names
+print(term_status)
+
+# Calculate percentAGEs
+total_births <- sum(term_status)
+preterm_births <- sum(term_status["Preterm",])
+early_preterm_births <- sum(term_status[, "Early Preterm"])
+
+preterm_percentAGE <- (preterm_births / total_births) * 100
+early_preterm_percentAGE <- (early_preterm_births / total_births) * 100
+
+# Print the percentAGEs
+cat(sprintf("PercentAGE of Preterm Births: %.2f%%\n", preterm_percentAGE))
+cat(sprintf("PercentAGE of Early Preterm Births: %.2f%%\n", early_preterm_percentAGE))
+```
+
+These values are different from the values shown in the "2023 March of Dimes report card for United States" (<https://www.marchofdimes.org/peristats/reports/united-states/report-card>.), where the averAGE precentAGE was 10,4%.
+The criteria of data collection probably searched to have a more balanced dataset to train the predictive model (Qiong Wei 2013) 
+
+### Delivery Week Distribution
+
+We analyze the distribution of delivery weeks among participants and how it relates to term status.
+
+```{r}
+# Plotting Delivery Week Distribution
+ggplot(participant_data, aes(x = delivery_wk, fill = as.factor(was_term))) + 
+  geom_histogram(binwidth = 1, position = "identity", alpha = 0.5, color = "black") + 
+  xlab("Delivery Week") + 
+  ylab("Count") + 
+  ggtitle("Distribution of Delivery Week") +
+  scale_fill_manual(name = "Term Status", values = c("TRUE" = "blue", "FALSE" = "red"), labels = c("TRUE" = "Term", "FALSE" = "Preterm"))
+
+```
+
+```{r}
+# Remove rows with NA values in AGE or delivery_wk
+correlation_data <- participant_data %>% filter(!is.na(AGE), !is.na(delivery_wk))
+
+# Check distribution of AGE and delivery_wk
+hist(correlation_data$AGE, main="AGE Distribution", xlab="AGE")
+hist(correlation_data$delivery_wk, main="Delivery Week Distribution", xlab="Delivery Week")
+
+# Conduct normality tests (Shapiro-Wilk test)
+shapiro_AGE <- shapiro.test(correlation_data$AGE)
+shapiro_delivery_wk <- shapiro.test(correlation_data$delivery_wk)
+
+# Print normality test results
+shapiro_AGE
+shapiro_delivery_wk
+
+# Choose correlation test based on normality
+if (shapiro_AGE$p.value > 0.05 & shapiro_delivery_wk$p.value > 0.05) {
+  # Use Pearson correlation if both are normally distributed
+  correlation_test <- cor.test(correlation_data$AGE, correlation_data$delivery_wk, method = "pearson")
+} else {
+  # Use Spearman correlation if not normally distributed
+  correlation_test <- cor.test(correlation_data$AGE, correlation_data$delivery_wk, method = "spearman")
+}
+
+# Print the correlation test results
+correlation_test
+```
+
+The Spearman's correlation test p-value result indicates the statistical of the correlation between AGE and delivery week. 
+A value of -0.1035 in the Correlation Coefficient (rho) suggests a weak, negative correlation. This means that as AGE increases, delivery_wk tends to slightly decrease.
+
+### Collection Week Distribution
+We analyze the distribution of samples collection weeks, both the earliest and latest collection weeks, among participants.
+
+```{r}
+# Plotting sample collection weeks
+ggplot(metadata, aes(x = collect_wk)) + 
+  geom_histogram(binwidth = 1, fill = "#5ea758", color = "grey") + 
+  xlab("Collection Week") + 
+  ylab("Count") + 
+  ggtitle("Distribution of Sample Collection Week")
+```
+
+There is a big peak of samples taken in the week 18, most of them come from only one study the "I".
+
+```{r}
+# Table indicating the sample week collection of the I project 
+table(metadata[metadata$project=="I",]$project, metadata[metadata$project=="I",]$collect_wk)
+
+# Table of participants samples per project
+table(participant_data$n_samples, participant_data$project)
+
+```
+
+The "I" project has the peculiarity of having more than one sample per participant per week. This could be useful for analyzing the method consistency.
+
+```{r}
+# Distribution of Number of Samples per Participant
+ggplot(participant_data, aes(x = n_samples)) + 
+  geom_histogram(binwidth = 1, fill = "#5ea758", color = "grey") + 
+  xlab("Number of Samples per Participant") + 
+  ylab("Count") + 
+  ggtitle("Distribution of Number of Samples per Participant")
+```
+There are 889 participants that have more than one sample that represents the 70%. This could be used to make longitudinal analysis.
+
+To disgregate the distribution of the earliest, latest and single samples we add an extra column.
+```{r warning=FALSE}
+# Categorize collection weeks
+participant_data <- participant_data %>%
+  mutate(
+    collect_wk_category = case_when(
+      collect_wk_earliest == collect_wk_latest ~ "single",
+      TRUE ~ "multiple"
+    )
+  )
+
+# Separate data for multiple and single categories
+multiple_data <- participant_data %>% filter(collect_wk_category == "multiple")
+single_data <- participant_data %>% filter(collect_wk_category == "single")
+
+# Plotting Collection Week Distribution (Earliest and Latest)
+ggplot() + 
+  geom_histogram(data = multiple_data, aes(x = collect_wk_earliest, fill = "Earliest"), binwidth = 1, color = "grey", alpha = 0.5, position = "identity") + 
+  geom_histogram(data = multiple_data, aes(x = collect_wk_latest, fill = "Latest"), binwidth = 1, color = "grey", alpha = 0.5, position = "identity") + 
+  geom_histogram(data = single_data, aes(x = collect_wk_earliest, fill = "single"), binwidth = 1, color = "grey", alpha = 0.5, position = "identity") + 
+  xlab("Collection Week") + 
+  ylab("Count") + 
+  ggtitle("Collection Week") +
+  scale_fill_manual(name = "Collection Week Category", values = c("Earliest" = "blue", "Latest" = "red", "single" = "green"), 
+                    labels = c("Earliest", "Latest", "Single")) +
+  theme(legend.position = "right")
+```
+
+
+### Race/Ethnicity Distribution
+
+We analyze the distribution of NIH racial categories among the participants and perform a chi-squared test to examine the association between NIH racial categories and term status.
+
+```{r}
+# Race/Ethnicity Distribution
+ethnicity_distribution <- table(participant_data$nih_racial_category)
+ethnicity_distribution
+```
+
+
+```{r warning=FALSE}
+# Realizar el test chi-cuadrado
+chi_sq_test <- chisq.test(table(participant_data$nih_racial_category, participant_data$was_term))
+
+# Calcular residuos ajustados
+residuals_table <- as.data.frame(as.table(chi_sq_test$stdres))
+colnames(residuals_table) <- c("nih_racial_category", "was_term", "std_residual")
+
+# Añadir columna de significancia
+residuals_table <- residuals_table %>%
+  mutate(significance = case_when(
+    abs(std_residual) > 3.29 ~ "***",  # p < 0.001
+    abs(std_residual) > 2.68 ~ "**",   # p < 0.01
+    abs(std_residual) > 1.96 ~ "*",    # p < 0.05
+    TRUE ~ ""
+  ))
+
+# Preparar los datos para las etiquetas de las barras
+data_summary <- participant_data %>%
+  group_by(nih_racial_category, was_term) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(nih_racial_category) %>%
+  mutate(total_count = sum(count),
+         percentAGE = count / total_count * 100) %>%
+  filter(was_term == FALSE)  # Mantener solo los nacimientos prematuros
+
+# Ordenar categorías por porcentaje de nacimientos prematuros
+ordered_categories <- data_summary %>%
+  arrange(percentAGE) %>%
+  pull(nih_racial_category) %>%
+  unique()
+
+participant_data$nih_racial_category <- factor(participant_data$nih_racial_category, levels = ordered_categories)
+
+# Combinar residuos con los datos para las etiquetas
+data_summary <- data_summary %>%
+  left_join(residuals_table %>% filter(was_term == FALSE), by = "nih_racial_category")
+
+# Generar el gráfico con ggplot2
+ggplot(participant_data, aes(x = nih_racial_category, fill = was_term)) + 
+  geom_bar(position = "stack") + 
+  geom_text(data = data_summary, 
+            aes(x = nih_racial_category, 
+                y = total_count, 
+                label = paste0(sprintf("%.1f%%", percentAGE), " ", significance)), 
+            inherit.aes = FALSE, # Evitar heredar estéticas globales
+            vjust = -0.5) +
+  xlab("NIH Racial Category") + 
+  ylab("Count") + 
+  ggtitle("Distribution of NIH Racial Category with Preterm Proportions") +
+  annotate("text", x = Inf, y = Inf, 
+           label = paste("chi_sq p-value:", format(chi_sq_test$p.value, digits = 2)), 
+           hjust = 1.1, vjust = 2, size = 3) +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+
+
+ggplot(participant_data, aes(x = nih_racial_category, fill = was_term)) + 
+  geom_bar(position = "stack") + 
+  # Agregar porcentajes debajo
+  geom_text(data = data_summary, 
+            aes(x = nih_racial_category, 
+                y = total_count, 
+                label = sprintf("%.1f%%", percentAGE)), 
+            inherit.aes = FALSE, 
+            vjust = -0.5) +
+  # Agregar asteriscos encima
+  geom_text(data = data_summary, 
+            aes(x = nih_racial_category, 
+                y = total_count + 20, # Ajusta esta distancia según el tamaño del gráfico
+                label = significance), 
+            inherit.aes = FALSE, 
+            vjust = -0.5) +
+  xlab("NIH Racial Category") + 
+  ylab("Count") + 
+  ggtitle("Distribution of NIH Racial Category with Preterm Proportions") +
+  annotate("text", x = Inf, y = Inf, 
+           label = paste("chi_sq p-value:", format(chi_sq_test$p.value, digits = 2)), 
+           hjust = 1.1, vjust = 2, size = 3) +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+
+```
+
+We can see that there is a significant difference between the participants ethnic groups, in number and proportions of preterm births.
+
+Of all live births in the United States during 2020-2022 (averAGE), 24.3% were Hispanic, 51.5% were White, 14.4% were Black, 0.7% were American Indian/Alaska Native and 6.4% were Asian/Pacific Islander (<https://www.marchofdimes.org/peristats/data?reg=99&top=2&stop=2&lev=1&slev=1&obj=1>)
+
+On the other hand the ethnic percetAGEs of preterm birth are really different shown in the "2023 March of Dimes report card for United States" (<https://www.marchofdimes.org/peristats/reports/united-states/report-card>). Not just the percentAGEs, but also the order of the ethnic categories.
+
+* Ethnic preterm precentAGEs:
+  + Asian -- 9.0%
+  + White -- 9.4%
+  + Hispanic -- 10.1%
+  + American Indian/Alaska Native -- 12.2%
+  + Pacific Islanders -- 12.2%
+  + Black -- 14.6%
+  
+  
+References
+
+Fuchs 2018 - <https://doi.org/10.1371/journal.pone.0191002>
+Qiong Wei 2013 - <https://doi.org/10.1371/journal.pone.0067863>

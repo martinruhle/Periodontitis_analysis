@@ -1,0 +1,118 @@
+bio search PRJNA774299 --csv > Datos_marco/PRJNA774299.csv
+bio search PRJNA774981 --csv > Datos_marco/PRJNA774981.csv
+
+cut -d',' -f1 Datos_marco/PRJNA774299.csv > Datos_marco/SRR_list/ID_SRR.list
+cut -d',' -f1 Datos_marco/PRJNA774981.csv > Datos_marco/SRR_list2/ID_SRR.list
+
+bash scripts/manifest_creator2.sh Datos_marco/SRR_list/reads/ Datos_marco/Manifest/manifest2.txt
+
+# To activate Conda
+conda activate qiime2-amplicon-2024.5
+
+qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-path Manifest/manifest.txt --output-path Imported_data/cruda.qza --input-format PairedEndFastqManifestPhred33V2
+
+qiime demux summarize --i-data Imported_data/cruda.qza --o-visualization Imported_viz/cruda.qzv
+
+Corrí este paso sin trimear los primers:
+qiime dada2 denoise-paired --i-demultiplexed-seqs Imported_data/cruda.qza --p-n-threads 8 --p-trim-left-f 0 --p-trim-left-r 0 --p-trunc-len-f 279 --p-trunc-len-r 242 --o-table Table_ASV/table_asv.qza --o-representative-sequences Rep_Seqs/rep-seqs.qza --o-denoising-stats Denoise_Stat/denoising-stats.qza
+
+Trimeo de primers:
+qiime cutadapt trim-paired --i-demultiplexed-sequences Imported_data/cruda.qza --p-front-f CCTACGGGNGGCWGCAG --p-front-r GACTACHVGGGTATCTAATCC --p-no-discard-untrimmed --o-trimmed-sequences Imported_data/cruda_trimmed.qza
+
+Denoising con data trimeada:
+qiime dada2 denoise-paired --i-demultiplexed-seqs Imported_data/cruda_trimmed.qza --p-n-threads 8 --p-trim-left-f 0 --p-trim-left-r 0 --p-trunc-len-f 272 --p-trunc-len-r 246 --o-table Table_ASV/table_trimmed_asv.qza --o-representative-sequences Rep_Seqs/rep-seqs_trimmed.qza --o-denoising-stats Denoise_Stat/denoising-stats_trimmed.qza
+
+qiime metadata tabulate --m-input-file Denoise_Stat/denoising-stats_trimmed.qza --o-visualization Imported_viz/denoise_stats_trimmed.qzv 
+
+qiime feature-table summarize --i-table Table_ASV/table_trimmed_asv.qza --o-visualization Imported_viz/table_trimmed.qzv
+
+qiime feature-table tabulate-seqs --i-data Rep_Seqs/rep-seq_trimmed.qza --o-visualization Imported_viz/rep-seq_trimmed.qzv
+
+Curvas de rarefaccion
+qiime diversity alpha-rarefaction --i-table Table_ASV/table_trimmed_asv.qza --p-max-depth 45000 --p-metrics observed_features --o-visualization Imported_Viz/rare_curve.qzv
+
+qiime feature-classifier extract-reads --i-sequences Classifier/silva-138.1-ssu-nr99-seqs.qza --p-f-primer CCTACGGGNGGCWGCAG --p-r-primer GACTACHVGGGTATCTAATCC --p-n-jobs 10 --p-read-orientation 'forward' --o-reads Classifier/silva-138.1-ssu-nr99-seqs-marco.qza
+
+qiime rescript dereplicate --i-sequences Classifier/silva-138.1-ssu-nr99-seqs-marco.qza --i-taxa Classifier/silva-138.1-ssu-nr99-tax.qza --p-mode 'uniq' --o-dereplicated-sequences Classifier/silva-138.1-ssu-nr99-seqs-marco-uniq.qza --o-dereplicated-taxa Classifier/silva-138.1-ssu-nr99-tax-marco-derep-uniq.qza
+
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads Classifier/silva-138.1-ssu-nr99-seqs-marco-uniq.qza --i-reference-taxonomy Classifier/silva-138.1-ssu-nr99-tax-marco-derep-uniq.qza --o-classifier Classifier/silva-138.1-ssu-nr99-marco-classifier.qza
+
+-------
+#Empiezo los comandos con los totales:
+#Desde Datos_marco/
+qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-path Manifest/manifest2.txt --output-path Imported_data/completo.qza --input-format PairedEndFastqManifestPhred33V2
+
+qiime demux summarize --i-data Imported_data/completo.qza --o-visualization Imported_viz/completo.qzv
+
+qiime cutadapt trim-paired --i-demultiplexed-sequences Imported_data/completo.qza --p-front-f CCTACGGGNGGCWGCAG --p-front-r GACTACHVGGGTATCTAATCC --p-no-discard-untrimmed --o-trimmed-sequences Imported_data/completo_trimmed.qza
+
+qiime demux summarize --i-data Imported_data/completo_trimmed.qza --o-visualization Imported_viz/completo_trimmed.qzv
+
+#Denoising con DADA2
+#Prueba1
+qiime dada2 denoise-paired --i-demultiplexed-seqs Imported_data/completo_trimmed.qza --p-n-threads 10 --p-trim-left-f 0 --p-trim-left-r 0 --p-trunc-len-f 289 --p-trunc-len-r 257 --o-table Table_ASV/completo_table_trimmed_asv.qza --o-representative-sequences Rep_Seqs/completo_rep-seqs_trimmed.qza --o-denoising-stats Denoise_Stat/completo_denoising-stats_trimmed.qza
+
+#Prueba2
+qiime dada2 denoise-paired --i-demultiplexed-seqs Imported_data/completo_trimmed.qza --p-n-threads 10 --p-trim-left-f 0 --p-trim-left-r 0 --p-trunc-len-f 272 --p-trunc-len-r 257 --o-table Table_ASV/completo_table_trimmed_asv2.qza --o-representative-sequences Rep_Seqs/completo_rep-seqs_trimmed2.qza --o-denoising-stats Denoise_Stat/completo_denoising-stats_trimmed2.qza
+
+qiime metadata tabulate --m-input-file Denoise_Stat/completo_denoising-stats_trimmed.qza --o-visualization Imported_viz/completo_denoise_stats_trimmed.qzv 
+
+qiime feature-table summarize --i-table Table_ASV/completo_table_trimmed.qza --o-visualization Imported_viz/completo_table_trimmed.qzv
+
+qiime feature-table tabulate-seqs --i-data Rep_Seqs/completo_rep-seqs_trimmed.qza --o-visualization Imported_viz/completo_rep-seq_trimmed.qzv
+
+#Curvas de rarefaccion
+qiime diversity alpha-rarefaction --i-table Table_ASV/completo_table_trimmed_asv2.qza --p-max-depth 45000 --p-metrics observed_features --o-visualization Imported_viz/completa_rare_curve.qzv
+
+qiime diversity alpha-rarefaction --i-table Table_ASV/table_trimmed_asv2.qza --p-max-depth 45000 --p-metrics observed_features --o-visualization Imported_viz/completa_rare_curve.qzv
+
+#Clasificación taxonómica
+qiime feature-classifier classify-sklearn --i-classifier Classifier/silva-138.1-ssu-nr99-marco-classifier.qza --i-reads Datos_marco/Rep_Seqs/completo_rep-seqs_trimmed2.qza --o-classification Taxonomy/completo_taxonomy.qza
+
+qiime metadata tabulate --m-input-file Taxonomy/completo_taxonomy.qza --o-visualization Datos_marco/Imported_viz/completo_taxonomy.qzv
+
+#Remocion de secuencias de mirocondrias y cloroplastos
+qiime taxa filter-table --i-table Datos_marco/Table_ASV/completo_table_trimmed_asv2.qza --i-taxonomy Taxonomy/completo_taxonomy.qza --p-exclude f__Mitochondria,o__Chloroplast --o-filtered-table Datos_marco/Table_ASV/completo_table_trimmed_asv_no_mito_chlo.qza
+
+qiime taxa filter-seqs --i-sequences Datos_marco/Rep_Seqs/completo_rep-seqs_trimmed2.qza --i-taxonomy Taxonomy/completo_taxonomy.qza --p-exclude f__Mitochondria,o__Chloroplast --o-filtered-sequences Datos_marco/Rep_Seqs/completo_rep-seq_trimmed2_no_mito_chlo.qza
+
+#Barplot general de todas las muestras
+qiime taxa barplot --i-table Datos_marco/Table_ASV/completo_table_trimmed_asv2.qza --i-taxonomy Taxonomy/completo_taxonomy.qza --o-visualization Datos_marco/Imported_viz/completo_taxonomy_barplot.qzv
+
+#Arbol filogenetico
+qiime phylogeny align-to-tree-mafft-fasttree --p-n-threads 12 --i-sequences Rep_Seqs/completo_rep-seq_trimmed2_no_mito_chlo.qza --o-alignment Phylo/completo_alingned_seqs.qza --o-masked-alignment Phylo/completo_masked_alingned_seqs.qza --o-tree Phylo/completo_unrooted_tree.qza --o-rooted-tree Phylo/completo_rooted_tree.qza
+
+#Analisis de diversidad
+qiime diversity core-metrics-phylogenetic --p-n-jobs-or-threads 12 --i-phylogeny Phylo/completo_rooted_tree.qza --i-table Table_ASV/completo_table_trimmed_asv_no_mito_chlo.qza --p-sampling-depth 10000 --m-metadata-file completo_metadata.txt --output-dir Diversity_metrics
+
+#Barplot general de todas las muestras segunda parte
+qiime taxa barplot --i-table Datos_marco/Table_ASV/completo_table_trimmed_asv_no_mito_chlo.qza --i-taxonomy Taxonomy/completo_taxonomy.qza --m-metadata-file Datos_marco/completo_metadata.txt --o-visualization Datos_marco/Imported_viz/completo_taxonomy_barplot_con_metadata.qzv
+
+# Analisis de diversidad por grupos
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity Datos_marco/Diversity_metrics/shannon_vector.qza \
+  --m-metadata-file metadata_groups.tsv \
+  --o-visualization Diversity_analysis/shannon_group_significance.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix Datos_marco/Diversity_metrics/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata_groups.tsv \
+  --m-metadata-column Periodontitis_extent \
+  --p-method permanova \
+  --o-visualization Diversity_analysis/weighted_unifrac_permanova_Periodontitis_extent.qzv
+
+---------
+Single reads para chequear si los forward y los reverse son los mismos
+qiime tools import --type 'SampleData[SequencesWithQuality]' \
+--input-path Datos_marco/Manifest/reverse_manifest.txt \
+--output-path Datos_marco/Imported_data/reverse_only.qza \
+--input-format SingleEndFastqManifestPhred33V2
+
+qiime demux summarize --i-data Datos_marco/Imported_data/reverse_only.qza --o-visualization Datos_marco/Imported_viz/reverse_only.qzv
+
+
+Comandos para copiar entre compus:
+(base) martinruhle@DESKTOP-P5IE0S0:~/Datos_marco$ scp alumno43@10.147.17.33:/home/alumno43/Datos_marco/Imported_viz/*.qzv Imported_viz/
+
+scp alumno43@10.147.17.33:/home/alumno43/Datos_marco/Imported_viz/completo_trimmed.qzv Imported_viz/
+scp alumno43@10.147.17.33:/home/alumno43/Diversity_analysis/*.qzv Documents/Ecología_microbiana/Proyecto_final/GitHub_repository/Results/

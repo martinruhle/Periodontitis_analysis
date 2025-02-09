@@ -1,0 +1,363 @@
+---
+title: "PCA Analysis of Periodontitis Relative Abundance Data"
+author: "Martin Ruhle"
+date: "2024-11-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This analysis aims to perform a Principal Component Analysis (PCA) on the relative abundance data of microbiome samples. The PCA will reveal patterns of variation in the data, which are visualized using various categorical variables.
+
+
+### Load Libraries
+We begin by loading the necessary libraries. `ggplot2` is used for visualization, `dplyr` for data manipulation, and `FactoMineR` for multivariate analysis.
+```{r message=FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(FactoMineR)
+```
+
+### Load the Data
+
+```{r}
+rel_abun_metadata <- read.csv("C:/Users/User/Documents/Ecología_microbiana/Proyecto_final/GitHub_repository/Data/genus_rel_abund_meta.csv")
+```
+
+```{r}
+rel_abun_metadata <- rel_abun_metadata %>%
+  mutate(
+    cigarrettes_group = case_when(
+      cigarrettes_group == 0 ~ "0",
+      cigarrettes_group > 0 & cigarrettes_group <= 10 ~ "<=10",
+      cigarrettes_group > 10 & cigarrettes_group <= 20 ~ "<=20",
+      cigarrettes_group > 20 ~ "mas de 20",
+      TRUE ~ NA_character_
+    ))
+```
+
+
+### PCA Data Preparation
+To prepare the data for PCA:
+
+1. We exclude non-numeric columns.
+2. We remove columns with zero variance, as they do not contribute to PCA.
+3. We normalize the remaining numeric columns using z-score normalization.
+
+```{r}
+# Exclude non-numeric columns for PCA
+pca_data <- rel_abun_metadata %>%
+  dplyr::select(-c(1:20))
+
+# Remove columns with zero variance
+pca_data <- pca_data[, sapply(pca_data, function(col) var(col, na.rm = TRUE) > 0)]
+
+# Normalize the data (z-score normalization)
+pca_data_normalized <- scale(pca_data)
+```
+
+### Perform PCA
+We perform two PCA analyses:
+
+1. Unnormalized PCA: For the raw data.
+2. Normalized PCA: Using z-score normalized data to account for scale differences.
+
+```{r}
+# Perform PCA on unnormalized data
+pca_result <- prcomp(pca_data, scale. = FALSE)
+
+# Perform PCA on normalized data
+pca_result_norm <- prcomp(pca_data_normalized, scale. = TRUE)
+```
+
+### PCA Scores
+We extract the PCA scores for the first two principal components and add relevant metadata columns for coloring in the visualizations.
+
+```{r}
+# Get the PCA scores for the first two principal components
+pca_scores <- as.data.frame(pca_result$x[, 1:2])
+pca_scores_norm <- as.data.frame(pca_result_norm$x[, 1:2])
+
+# Add metadata columns for plotting
+pca_scores <- pca_scores %>%
+  mutate(
+    Age = rel_abun_metadata$AGE,
+    BOP_total = rel_abun_metadata$BOP_total,
+    CAL_total = rel_abun_metadata$CAL_total,
+    Cigarrettes_day = rel_abun_metadata$Cigarrettes_day,
+    health_condition = rel_abun_metadata$health_condition,
+    Months_smoking = rel_abun_metadata$Months_smoking,
+    Country = rel_abun_metadata$geo_loc_name_country,
+    Smoking = rel_abun_metadata$Smoking,
+    teeth = rel_abun_metadata$teeth,
+    Periodontitis_extent = rel_abun_metadata$Periodontitis_extent,
+    cigarrettes_group = rel_abun_metadata$cigarrettes_group,
+    Months_smoking_group = rel_abun_metadata$Months_smoking_group,
+    teeth_group = rel_abun_metadata$teeth_group,
+    BOP_group = rel_abun_metadata$BOP_group,
+    CAL_group = rel_abun_metadata$CAL_group
+  )
+
+pca_scores_norm <- pca_scores_norm %>%
+  mutate(
+    project = rel_abun_metadata$project,
+    specimen = rel_abun_metadata$specimen,
+    age = rel_abun_metadata$age,
+    was_preterm = rel_abun_metadata$was_preterm,
+    was_early_preterm = rel_abun_metadata$was_early_preterm,
+    NIH.Racial.Category = rel_abun_metadata$NIH.Racial.Category,
+    age_group = rel_abun_metadata$age_group
+  )
+```
+
+### PCA Plotting Function
+To make the visualizations, we define a function `plot_pca()` that takes in the PCA data, a variable for coloring, and a title. This allows us to plot PCA results by various metadata categories.
+
+```{r}
+# Function to plot PCA with specified color variable
+plot_pca <- function(data, color_var, title) {
+  # Check if the variable is numeric or categorical
+  if (is.numeric(data[[color_var]])) {
+    # Continuous variable
+    color_scale <- scale_color_gradient2(
+      low = "blue",
+      mid = "green",
+      high = "red",
+      midpoint = median(data[[color_var]], na.rm = TRUE),
+      na.value = "grey50"
+    )
+  } else {
+    # Categorical variable
+    color_scale <- scale_color_discrete() # Uses the default ggplot2 palette
+  }
+  
+  ggplot(data, aes(x = PC1, y = PC2, color = data[[color_var]])) +
+    geom_point(alpha = 0.85) +
+    labs(
+      title = title,
+      x = paste0("PC1 (", pc1_var, "%)"),
+      y = paste0("PC2 (", pc2_var, "%)"),
+      color = color_var
+    ) +
+    color_scale +
+    theme_minimal(base_size = 14) +
+    theme(
+      panel.grid.major = element_line(color = "grey80"),
+      panel.grid.minor = element_line(color = "grey90"),
+      panel.background = element_rect(fill = "grey95"),
+      plot.background = element_rect(fill = "grey95", color = NA),
+      legend.background = element_rect(fill = "grey90", color = NA)
+    )
+}
+```
+
+### Visualizations
+We use `plot_pca()` to create PCA plots, each colored by a different variable of interest: project, age, was_preterm, and NIH.Racial.Category.
+
+```{r warning=FALSE}
+# Plot PCA colored by each variable of interest
+pca_plots <- list(
+  age = plot_pca(pca_scores, "Age", "PCA of Relative Abundance Data (by Age)"),
+  bop_total = plot_pca(pca_scores, "BOP_total", "PCA of Relative Abundance Data (by BOP Total)"),
+  cal_total = plot_pca(pca_scores, "CAL_total", "PCA of Relative Abundance Data (by CAL Total)"),
+  cigarrettes_day = plot_pca(pca_scores, "Cigarrettes_day", "PCA of Relative Abundance Data (by Cigarettes/Day)"),
+  health_condition = plot_pca(pca_scores, "health_condition", "PCA of Relative Abundance Data (by Health Condition)"),
+  months_smoking = plot_pca(pca_scores, "Months_smoking", "PCA of Relative Abundance Data (by Months Smoking)"),
+  country = plot_pca(pca_scores, "Country", "PCA of Relative Abundance Data (by Country)"),
+  smoking = plot_pca(pca_scores, "Smoking", "PCA of Relative Abundance Data (by Smoking Status)"),
+  teeth = plot_pca(pca_scores, "teeth", "PCA of Relative Abundance Data (by Teeth Count)"),
+  periodontitis_extent = plot_pca(pca_scores, "Periodontitis_extent", "PCA of Relative Abundance Data (by Periodontitis Extent)"),
+  cigarrettes_group = plot_pca(pca_scores, "cigarrettes_group", "PCA of Relative Abundance Data (by Cigarettes Group)"),
+  months_smoking_group = plot_pca(pca_scores, "Months_smoking_group", "PCA of Relative Abundance Data (by Months Smoking Group)"),
+  teeth_group = plot_pca(pca_scores, "teeth_group", "PCA of Relative Abundance Data (by Teeth Group)"),
+  bop_group = plot_pca(pca_scores, "BOP_group", "PCA of Relative Abundance Data (by BOP Group)"),
+  cal_group = plot_pca(pca_scores, "CAL_group", "PCA of Relative Abundance Data (by CAL Group)")
+)
+
+# Display the plots
+for (plot_name in names(pca_plots)) {
+  print(pca_plots[[plot_name]])
+}
+
+```
+
+
+### Disagregation and detailed PCA
+
+Taking into account that "H" an "I" projects doesn´t have numeric ages we can plot separately.
+
+```{r warning=FALSE}
+# Filter out projects "H" and "I" before plotting
+pca_scores_age_filtered <- pca_scores %>%
+  filter(!project %in% c("H", "I"))
+
+# Generate the PCA plot with age as the color variable, excluding projects "H" and "I"
+pca_plot_age_filtered <- plot_pca(pca_scores_age_filtered, "age", "PCA of Relative Abundance Data (by Age, excluding Projects H and I)")
+
+pca_plot_age_H <- plot_pca(pca_scores[!is.na(pca_scores$age_group),], "age_group", "PCA of Relative Abundance Data (by Age, excluding Projects H and I)")
+
+print(pca_plot_age_filtered)
+print(pca_plot_age_H)
+```
+
+
+### Species Analysis
+
+```{r}
+# Transform the dataset to long format, specifying columns 8 onward for species
+rel_abun_long <- rel_abun_metadata %>%
+  pivot_longer(cols = 8:ncol(rel_abun_metadata), names_to = "species", values_to = "abundance")
+
+# Define abundance categories with a specific order
+rel_abun_long <- rel_abun_long %>%
+  mutate(abundance_category = case_when(
+    abundance == 1 ~ "1",
+    abundance > 0.99 ~ ">0.99",
+    abundance > 0.95 ~ ">0.95",
+    abundance > 0.9 ~ ">0.9",
+    abundance > 0.75 ~ ">0.75",
+    abundance > 0.5 ~ ">0.5",
+    TRUE ~ "<=0.5"
+  ),
+  # Set the order for abundance categories
+  abundance_category = factor(abundance_category, levels = c("1", ">0.99", ">0.95", ">0.9", ">0.75", ">0.5", "<=0.5"))
+  )
+
+# Calculate counts and cumulative percentages
+cumulative_percentages <- rel_abun_long %>%
+  filter(abundance_category != "<=0.5") %>%  # Exclude "<=0.5" if not needed
+  group_by(abundance_category) %>%
+  summarize(count = n()) %>%
+  arrange(abundance_category) %>%  # This will now follow the specified factor levels order
+  mutate(cumulative_count = cumsum(count)) %>%  # Cumulative sum of counts
+  mutate(percentage = (cumulative_count / 3578) * 100)
+
+# Reorder abundance_category to be in descending order
+cumulative_percentages <- cumulative_percentages %>%
+  mutate(abundance_category = factor(abundance_category, levels = rev(levels(abundance_category))))
+
+# Plot the cumulative percentages with "1" as a distinct category
+ggplot(cumulative_percentages, aes(x = abundance_category, y = percentage, fill = abundance_category)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cumulative Percentage of Samples by Relative Abundance Category",
+       x = "Relative Abundance Category",
+       y = "Percentage of Samples") +
+  #scale_fill_brewer(palette = "viridis") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+# Plot the Abundance Taxa Distribution for Species and Genus
+ggplot() +
+  geom_density(data = rel_abun_long[rel_abun_long$abundance > 0.5, ], 
+               aes(x = abundance, color = "Species")) +
+  #geom_density(data = rel_abun_long_gen[rel_abun_long_gen$abundance > 0.5, ], 
+  #             aes(x = abundance, color = "Genus")) +
+  scale_color_manual(name = "Taxa level", values = c("Species" = "lightgreen"
+                                                     #, "Genus" = "red") # If genus is needed
+                     )) +
+  labs(title = "Abundance Taxa Distribution",
+       x = "Abundance", 
+       y = "Density") +
+  theme_minimal()
+```
+
+Now we will analyze the most dominant bacteria species and compare their preterm proportion with the total samples proportion using the Fisher's exact test.
+
+```{r}
+# Create a table with counts by species and was_preterm for abundance > 0.95
+species_table <- table(
+  rel_abun_long[rel_abun_long$abundance > 0.95, ]$species, 
+  rel_abun_long[rel_abun_long$abundance > 0.95, ]$was_preterm
+)
+
+# Convert the table to a data frame for easier manipulation
+species_df <- as.data.frame(species_table)
+
+# Rename columns to match "TRUE" and "FALSE"
+colnames(species_df) <- c("Species", "was_preterm", "Count")
+
+# Spread the "was_preterm" column to create separate "TRUE" and "FALSE" columns
+species_counts <- species_df %>%
+  tidyr::pivot_wider(names_from = was_preterm, values_from = Count, values_fill = 0) %>%
+  rename(`True` = `True`, `False` = `False`)  %>%
+  mutate(Total = `True` + `False`) %>%  # Calculate total counts
+  arrange(desc(Total)) %>%              # Sort by total counts in descending order
+  mutate(Preterm_perc = (True/Total*100)) %>% # Calculate the precentage
+  select(-Total)                      # Remove the total column if not needed in the output
+
+# Overall counts from metadata
+overall_counts <- table(metadata$was_preterm)
+total_false <- overall_counts["False"]
+total_true <- overall_counts["True"]
+
+# Perform Fisher's exact test for each species
+species_p_values <- species_counts %>%
+  rowwise() %>%
+  mutate(
+    p_value = fisher.test(matrix(
+      c(False, True, total_false - False, total_true - True),
+      nrow = 2
+    ))$p.value
+  ) %>%
+  ungroup()
+
+# Display results with species names and p-values
+species_p_values
+```
+
+
+```{r}
+# Calculate average abundance for each species and filter top 10
+top_n_species <- rel_abun_long %>%
+  group_by(species) %>%
+  summarize(mean_abundance = mean(abundance, na.rm = TRUE)) %>%
+  arrange(desc(mean_abundance)) %>%
+  slice_head(n = 9) # Number of species analyzed
+
+print(top_n_species)
+
+top_n_species_names <- top_n_species %>%
+  pull(species)
+
+# Filter for only top average species and plot
+top_n_species_data <- rel_abun_long %>%
+  filter(species %in% top_n_species_names)
+
+ggplot(top_n_species_data, aes(x = species, y = abundance, fill=species)) +
+  geom_boxplot(outlier.alpha = 0.1) +
+  scale_y_log10() +
+  stat_summary(fun.y=mean, shape=18, size=1, color="red") +
+  labs(title = "Top Species by Average Relative Abundance",
+       x = "Top Species",
+       y = "Relative Abundance (log scale)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(top_n_species_data, aes(x = species, y = abundance, fill = species)) +
+  geom_violin(alpha = 0.7) +
+  scale_y_log10() +
+  stat_summary(fun.y=mean, shape=18, size=1, color="red") +
+  labs(title = "Density of Relative Abundance per Species",
+       x = "Species",
+       y = "Relative Abundance (log scale)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot density plots for each of the top 5 species with fixed scales
+ggplot(top_n_species_data, aes(x = abundance)) +
+  geom_density(fill = "skyblue", alpha = 0.7) +
+  scale_x_log10() +  # Log scale for abundance comparison
+  labs(title = "Density Plots of Most Abundant Species",
+       x = "Relative Abundance (log scale)",
+       y = "Frequency") +
+  facet_wrap(~ species, scales = "fixed") +  # Fixed scales for comparison
+  theme_minimal()
+```
